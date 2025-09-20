@@ -41,10 +41,12 @@ The repository now optimizes for (1) fast onboarding, (2) reproducible runs, (3)
 
 ### 0. Prerequisites
 Install (ensure on `PATH`):
-* JDK 17+
-* (Optional) Maven 3.8+ (Maven Wrapper auto‑fallback per service)
+* JDK 17+ (Java 21 also works; tested with 21)
+* (Optional) Maven 3.8+ (Maven Wrapper included; global Maven not required)
 * Node.js 18+ (for frontend build)
 * (Optional) Docker + Docker Compose plugin (for `--docker` mode)
+
+No external database (MySQL/Postgres/etc.) is required. Each service uses its own embedded H2 file database under `./data/`.
 
 Clone the repo:
 ```bash
@@ -149,7 +151,7 @@ Key pieces:
 * Products Page: Fetches item catalog from `GET /api/v1/items` (public).
 * Cart Page: Displays `GET /api/v1/cart-items` and `GET /api/v1/cart-items/summary` (requires Basic Auth).
 * Shared State: `CartContext` wraps routes to provide a synchronized cart state across pages. Adding an item triggers a POST then refresh of shared context so all consumers update instantly.
-* Auth: Implemented with browser Basic Auth header (prompt or manual). Future upgrade path: token storage + refresh cycle.
+* Auth: Implemented with browser Basic Auth header (prompt or manual). Future upgrade path: JWT access/refresh tokens.
 * Tooling: Vite for fast dev builds; production build executed automatically by `run.sh` (no manual `npm run build` needed).
 
 Frontend Flow Example:
@@ -161,7 +163,7 @@ Frontend Flow Example:
 ## Backend Overview
 Microservices (each independent Spring Boot application) expose cohesive capabilities:
 * Inventory Service (`8081`): Item catalog with code, description, quantity, price. Seeds via `InventorySeedConfig` (idempotent).
-* User Service (`8082`): Demo users (system/admin/demo) created in `UserSeedConfig`. Basic Auth user lookup leveraged by gateway.
+* User Service (`8082`): Demo users (system/admin/demo) created in `UserSeedConfig` (all password = `demo`). Basic Auth user lookup leveraged by gateway.
 * Cart Service (`8083`): Persists cart lines per user with price snapshots; endpoints for list, summary, add, remove. Uses a REST call to inventory to enrich line pricing and store snapshot.
 * API Gateway (`8080`): Single entrypoint; static asset host for frontend; routes API calls to internal services; applies Basic Auth security rules (public inventory list, protected cart/user endpoints). Static routing (no discovery) for clarity.
 
@@ -173,7 +175,7 @@ Design Choices:
 
 Extensibility Paths:
 * Reintroduce discovery (Appendix A) and expand to dynamic scaling.
-* Swap Basic Auth for JWT once auth complexity is desired.
+* Swap Basic Auth (demo) for JWT once auth complexity is desired.
 * Add Actuator + metrics for production readiness.
 * Introduce caching (Redis) for hot catalog reads.
 
@@ -182,6 +184,7 @@ Extensibility Paths:
 |---------|-------|-----|
 | `permission denied: ./setup.sh` | Missing execute bit on Unix | `chmod +x setup.sh run.sh` or use `bash setup.sh` |
 | `command not found: mvn` | Global Maven not installed | Safe to ignore: scripts fall back to per-service `mvnw` |
+| Cart 500 on `/api/v1/cart-items` | (Pre-1.1.1) Gateway user lookup lacked password field | Update to >=1.1.1 or pull latest; restart with `./run.sh --force-restart` |
 | Skipped service (port in use) | Previous instance still running | Use `./run.sh --force-restart` to kill & restart |
 | Want a clean rebuild | Incremental jar not refreshed | Run with `--rebuild` |
 | Old plugin exit 143 lines | Legacy spring-boot:run noise | Eliminated: jars now launched directly |
@@ -194,7 +197,7 @@ Extensibility Paths:
 ## Features
 * Two-command startup (`setup` then `run`) – no manual multi-step orchestration
 * Direct static routing via API Gateway (no discovery layer required)
-* Gateway routing + CORS + Basic Auth (lookup endpoint: `/api/v1/users/username/{username}`)
+* Gateway routing + CORS + Basic Auth (lookup endpoint: `/api/v1/users/username/{username}`) – demo-only; password hash exposed upstream strictly for development
 * Inventory management (seeded products)
 * Cart service with price snapshots & summary endpoint
 * User service with hashed passwords & deterministic seed users
@@ -384,23 +387,22 @@ In production environment, we leverage the infrastructure to make the downstream
 | user-service          | 8082 |
 | cart-service          | 8083 |
 
-_Note_: for development purpose, we could bypass authentication by adding "Username: ```<your-test-username>```" to HTTP Header when we send request to downstream services.
+_Note_: Legacy instruction (bypassing auth by injecting a `Username` header) has been removed in this simplified setup; always use Basic Auth (`demo:demo`) unless you extend auth.
 
 ## How to run the application
-### Setup development workspace
-The setup development workspace process is simpler than ever with following steps:
-1. Install [JDK 17](https://www.oracle.com/java/technologies/javase/jdk17-archive-downloads.html).
-1. Install [Maven](https://maven.apache.org/download.cgi?Preferred=ftp://mirror.reverse.net/pub/apache/).
-1. Install MySQL.
-1. Clone this project to your local machine.
-1. Open the pom.xml file and open as a project using Intellij IDEA.
+### Setup development workspace (Legacy Section – Superseded)
+Use the [Quick Start](#quick-start-two-commands). No MySQL or manual IDE import steps are required beyond cloning. This legacy section is retained only for historical comparison.
 
-That's all.
-
-### Run a microservice
-You can run Spring Boot microservice in different ways, but first make sure you are in the root directory of the microservice you want to run:
-- Run jar file (of course you need to build it first): ```mvn install && java -jar target/<service-name>-1.0.0.jar```
-- Run with Spring Boot: ```mvn spring-boot:run```
+### Run a microservice (Optional Advanced Usage)
+Normally you use `./run.sh`. For targeted service development you may run one service directly (from that service directory):
+```
+./mvnw -q -DskipTests package && java -jar target/<service>-1.0.0.jar --server.port=808X
+```
+Or during iterative coding:
+```
+./mvnw spring-boot:run
+```
+Ensure the other dependent services are also running (via another terminal with `./run.sh --force-restart` or individual launches). Frontend static assets are copied only when using `run.sh`; if you run the gateway alone after editing frontend code, execute `npm run build` in `frontend/` then copy `frontend/dist/*` into `api-gateway/src/main/resources/static/` manually or just re-run `./run.sh`.
 
 ## Project folder structure and Frameworks, Libraries
 ### Project folder structure
@@ -429,6 +431,38 @@ The Frameworks/Libraries used in the project and their purposes:
 - spring-security-test: for the testing Spring Security.
 - modelmapper: to make object mapping easy, by automatically determining how one object model maps to another, based on conventions.
 
+## Auth & Security (Demo Implementation)
+Current auth is intentionally minimal:
+* Basic Auth over HTTPS is recommended (this demo does not provision TLS automatically).
+* The user-service exposes a `UserDTO` including a SHA‑256 password hash (demo only). The gateway hashes the presented Basic Auth password with the same algorithm and compares.
+* Roles are stored already prefixed (`ROLE_USER`, `ROLE_ADMIN`, etc.). The gateway avoids double-prefixing.
+* All mutation endpoints (cart add/remove, listing user details) require authentication; product catalog `GET /api/v1/items` is public.
+
+Security Caveats (Do NOT use as-is in production):
+1. Exposing password hashes via service DTO is insecure outside of a controlled demo.
+2. No account lockout / rate limiting.
+3. No TLS termination provided out of the box.
+4. No CSRF tokens (API-only + Basic usage) or refresh token strategy.
+
+Planned (see Roadmap): replace with JWT access/refresh tokens, dedicated auth endpoints, stronger password encoding (e.g., bcrypt with salt), and removal of password hash from outward DTOs.
+
+## Data Persistence & Reset
+Each service persists its H2 database under `./data/<service>-db.*`. To reset all data (including carts, users, inventory back to seeded defaults):
+```
+rm -f data/*-db.*
+./run.sh --force-restart
+```
+Users and inventory will be reseeded automatically; carts will be empty.
+
+## Changelog
+### 1.1.1
+* Fix: Gateway Basic Auth failure for cart endpoints – user-service `UserDTO` now includes hashed password so gateway can authenticate.
+* Docs: Added Auth & Security section, Data Persistence & Reset, Changelog; removed obsolete MySQL requirement & legacy bypass header note; clarified role handling.
+* Minor: Troubleshooting entry for historical cart 500 error.
+
+### 1.1.0
+* Simplified architecture (removed discovery by default, static routing, deterministic seeding, shared cart context).
+
 ## Appendix A – Re‑Enable Service Discovery (Optional)
 If you need dynamic service registration (e.g., scaling instances or changing ports), you can restore Eureka:
 
@@ -446,7 +480,7 @@ If you need dynamic service registration (e.g., scaling instances or changing po
 Rollback is simply removing those dependencies and properties again.
 
 ## Version
-  1.1.0 (simplified – no discovery; jar-based launcher; shared cart context; deterministic seeding refinements)
+  1.1.1 (auth DTO fix; security docs; no discovery by default; shared cart context; deterministic seeding refinements)
 
 ## License
   Copyright &copy; 2023. All Right Reserved.<br>
