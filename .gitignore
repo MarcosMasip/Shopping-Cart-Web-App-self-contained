@@ -7,6 +7,9 @@ frontend/dist/
 
 # Java build output
 **/target/
+# Occasionally stray build directories with trailing space were generated; ignore them too
+**/target */
+
 
 # OS / IDE
 .DS_Store

@@ -1,10 +1,10 @@
 import React from 'react';
 import { useProducts } from '../state/products';
-import { useCart } from '../state/cart';
+import { useCartContext } from '../state/CartContext';
 
 export default function ProductsPage(){
   const { products, loading, error } = useProducts();
-  const { addToCart } = useCart();
+  const { addToCart } = useCartContext();
   if (loading) return <p>Loading products...</p>;
   if (error) return <p style={{color:'red'}}>Error: {error}</p>;
   return (

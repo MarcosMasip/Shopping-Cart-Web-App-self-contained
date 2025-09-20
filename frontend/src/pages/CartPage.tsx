@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
-import { useCart } from '../state/cart';
+import { useCartContext } from '../state/CartContext';
 
 export default function CartPage(){
-  const { lines, summary, loading, error, refresh, removeFromCart } = useCart();
+  const { lines, summary, loading, error, refresh, removeFromCart } = useCartContext();
   useEffect(() => { refresh(); }, [refresh]);
   if (loading) return <p>Loading cart...</p>;
   if (error) return <p style={{color:'red'}}>Error: {error}</p>;
