@@ -13,4 +13,5 @@ public class ItemDTO implements Serializable {
     private Integer code;
     private String description;
     private int qty;
+    private java.math.BigDecimal price;
 }

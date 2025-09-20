@@ -34,8 +34,11 @@ public class ItemServiceImpl implements ItemService {
 
     @Override
     public Iterable<ItemDTO> listAll() {
-    return () -> itemRepository.findAll().stream()
-        .map(entity -> new ItemDTO(entity.getCode(), entity.getDescription(), entity.getQty(), entity.getPrice(), entity.getCreatedAt()))
-        .iterator();
+        Iterable<Item> all = itemRepository.findAll();
+        java.util.List<ItemDTO> list = new java.util.ArrayList<>();
+        for (Item entity : all) {
+            list.add(new ItemDTO(entity.getCode(), entity.getDescription(), entity.getQty(), entity.getPrice(), entity.getCreatedAt()));
+        }
+        return list;
     }
 }
