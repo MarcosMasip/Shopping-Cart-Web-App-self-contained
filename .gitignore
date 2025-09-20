@@ -16,6 +16,7 @@ frontend/dist/
 # Logs & env
 *.log
 .env
+logs/
 
 # Maven wrapper jars are already allowed inside each service .gitignore
 

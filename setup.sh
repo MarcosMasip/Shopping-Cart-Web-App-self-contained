@@ -13,15 +13,17 @@ if command -v mvn >/dev/null 2>&1; then
   MVN_CMD="mvn"
   MVN_VERSION_LINE=$(mvn -v | head -n1)
 else
-  # We'll rely on service-level Maven Wrapper scripts
+  # We'll rely on service-level Maven Wrapper scripts (discovery-service removed in simplified stack)
   MVN_CMD="./mvnw"
-  # pick one wrapper to show version
-  if [ -f "$ROOT_DIR/discovery-service/mvnw" ]; then
-    (cd "$ROOT_DIR/discovery-service" && chmod +x mvnw 2>/dev/null || true)
-    MVN_VERSION_LINE=$(cd "$ROOT_DIR/discovery-service" && ./mvnw -v | head -n1)
-  else
-    MVN_VERSION_LINE="Maven Wrapper will be used (version shown at first build)"
-  fi
+  # find the first existing service that has a mvnw to display version
+  MVN_VERSION_LINE="Maven Wrapper will be used (version shown at first build)"
+  for candidate in api-gateway inventory-service cart-service user-service; do
+    if [ -f "$ROOT_DIR/$candidate/mvnw" ]; then
+      (cd "$ROOT_DIR/$candidate" && chmod +x mvnw 2>/dev/null || true)
+      MVN_VERSION_LINE=$(cd "$ROOT_DIR/$candidate" && ./mvnw -v | head -n1)
+      break
+    fi
+  done
   echo "Global 'mvn' not found. Falling back to per-service Maven Wrapper scripts. (No global Maven installation required.)"
 fi
 
@@ -36,7 +38,8 @@ if [ ! -f "$ROOT_DIR/.env" ]; then
 fi
 
 echo "-> Pre-building backend services (offline deps)"
-for svc in discovery-service api-gateway inventory-service cart-service user-service; do
+# Discovery service removed; only build active services
+for svc in api-gateway inventory-service cart-service user-service; do
   (cd "$ROOT_DIR/$svc" && chmod +x mvnw 2>/dev/null || true)
   (cd "$ROOT_DIR/$svc" && $MVN_CMD -q -DskipTests dependency:go-offline || true)
 done

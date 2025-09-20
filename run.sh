@@ -15,14 +15,68 @@ FRONTEND_DEV_PORT=${FRONTEND_DEV_PORT:-5173}
 # Flags
 FORCE_RESTART=false
 DOCKER_ARG=false
+REBUILD=false
 for arg in "$@"; do
   case "$arg" in
     --force-restart) FORCE_RESTART=true ;;
     --docker) DOCKER_ARG=true ;;
+    --rebuild) REBUILD=true ;;
   esac
 done
 
 PIDS=()
+LOG_DIR="$ROOT_DIR/logs"
+mkdir -p "$LOG_DIR"
+
+JAR_VERSION="1.0.0" # keep in sync with pom versions if they change
+SERVICES=(inventory-service user-service cart-service api-gateway)
+
+jar_path(){
+  local svc=$1
+  echo "$ROOT_DIR/$svc/target/$svc-$JAR_VERSION.jar"
+}
+
+ensure_built(){
+  local svc=$1
+  local jar
+  jar=$(jar_path "$svc")
+  if $REBUILD || [[ ! -f "$jar" ]]; then
+    echo "[BUILD] Packaging $svc"
+    (cd "$ROOT_DIR/$svc" && ./mvnw -q -DskipTests package) || {
+      echo "[ERROR] Build failed for $svc"; exit 1; }
+  fi
+}
+
+start_service(){
+  local svc=$1 port=$2
+  local jar; jar=$(jar_path "$svc")
+  ensure_built "$svc"
+  echo "==> Starting $svc (port $port)"
+  # Use separate log per service
+  local log_file="$LOG_DIR/$svc.log"
+  # Basic health logging: first line + tail background
+  local effective_java_opts="${JAVA_OPTS:-}"
+  (SPRING_DEVTOOLS_RESTART_ENABLED=false java $effective_java_opts -jar "$jar" --server.port=$port >"$log_file" 2>&1 & echo $! >"$LOG_DIR/$svc.pid")
+  local pid=$(cat "$LOG_DIR/$svc.pid")
+  PIDS+=("$pid")
+}
+
+stop_existing_on_port(){
+  local p=$1
+  local pids
+  pids=$(lsof -t -nP -iTCP:"$p" -sTCP:LISTEN 2>/dev/null || true)
+  if [[ -n "$pids" ]]; then
+    echo "[INFO] Terminating processes on port $p: $pids"
+    echo "$pids" | xargs -r kill 2>/dev/null || true
+    for i in {1..15}; do
+      lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 || break
+      sleep 0.2
+    done
+    if lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1; then
+      echo "[WARN] Port $p still busy; sending SIGKILL"; echo "$pids" | xargs -r kill -9 2>/dev/null || true
+    fi
+  fi
+}
 
 cleanup(){
   if [[ "${MODE:-local}" == "local" ]]; then
@@ -33,7 +87,7 @@ cleanup(){
       fi
     done
     wait || true
-    echo "All processes stopped."  
+    echo "All processes stopped. Logs in $LOG_DIR"  
   else
     echo "==> To stop Docker services run: docker compose down"
   fi
@@ -53,65 +107,26 @@ wait_for(){
 
 local_mode(){
   MODE=local
-  echo "==> Running in LOCAL mode"
+  echo "==> Running in LOCAL mode (jar launch)"
   # helper to check if a port is already in use
   port_in_use(){ lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
-  kill_port(){
-    local p=$1
-    local pids
-    pids=$(lsof -t -nP -iTCP:"$p" -sTCP:LISTEN 2>/dev/null || true)
-    if [[ -n "$pids" ]]; then
-      echo "[INFO] Killing processes on port $p: $pids"
-      echo "$pids" | xargs -r kill 2>/dev/null || true
-      # brief wait for port to free
-      for i in {1..10}; do
-        port_in_use "$p" || break
-        sleep 0.2
-      done
-      if port_in_use "$p"; then
-        echo "[WARN] Port $p still busy after kill attempts."; fi
-    fi
-  }
   if $FORCE_RESTART; then
-    echo "==> FORCE_RESTART enabled: existing processes on target ports will be terminated."
+    echo "==> FORCE_RESTART enabled: will terminate existing processes on target ports"
   fi
-  if command -v mvn >/dev/null 2>&1; then
-    MVN_CMD="mvn"
-  else
-    MVN_CMD="./mvnw"
-    echo "(mvn not found, using Maven Wrapper per service)"
-  fi
-  # Service discovery removed: gateway uses static direct routes to backend services.
 
+  # Build backend jars (skip gateway until after frontend build so static assets are in place if resources packaging matters)
+  # Build backend service jars ahead of time (not starting yet)
   for svc in inventory-service user-service cart-service; do
+    # Derive associated port variable manually
     case "$svc" in
-      inventory-service) p=$INVENTORY_PORT ;;
-      user-service) p=$USER_PORT ;;
-      cart-service) p=$CART_PORT ;;
+      inventory-service) svc_port=$INVENTORY_PORT ;;
+      user-service) svc_port=$USER_PORT ;;
+      cart-service) svc_port=$CART_PORT ;;
     esac
-    if $FORCE_RESTART; then
-      # Extra safety: kill any java process whose cwd includes the service folder (handles cases where port changed or still closing)
-      jps=$(pgrep -fl "java" || true)
-      if [[ -n "$jps" ]]; then
-        while read -r line; do
-          pid=$(echo "$line" | awk '{print $1}')
-          if lsof -p "$pid" 2>/dev/null | grep -q "$svc"; then
-            echo "[INFO] Force killing lingering process $pid for $svc"
-            kill "$pid" 2>/dev/null || true
-          fi
-        done <<< "$jps"
-      fi
+    if $FORCE_RESTART && port_in_use "$svc_port"; then
+      stop_existing_on_port "$svc_port"
     fi
-    if port_in_use "$p" && $FORCE_RESTART; then
-      kill_port "$p"
-    fi
-    if port_in_use "$p"; then
-      echo "[WARN] Port $p already in use. Skipping start of $svc (assuming it's already running)."
-    else
-      echo "==> Starting $svc (port $p)"
-      (cd "$svc" && chmod +x mvnw 2>/dev/null || true && $MVN_CMD -q -DskipTests spring-boot:run) & PIDS+=("$!")
-      sleep 2
-    fi
+    ensure_built "$svc"
   done
 
   echo "==> Building frontend (production)"
@@ -122,16 +137,30 @@ local_mode(){
   rm -rf "$GATEWAY_STATIC_DIR"/*
   cp -R frontend/dist/* "$GATEWAY_STATIC_DIR"/
 
-  if port_in_use "$GATEWAY_PORT" && $FORCE_RESTART; then
-    kill_port "$GATEWAY_PORT"
-  fi
-  if port_in_use "$GATEWAY_PORT"; then
-    echo "[WARN] Port $GATEWAY_PORT already in use. Skipping start of api-gateway."
-  else
-    echo "==> Starting api-gateway"
-    (cd api-gateway && chmod +x mvnw 2>/dev/null || true && $MVN_CMD -q -DskipTests spring-boot:run) & PIDS+=("$!")
-  fi
+  # Build gateway after assets copied (so they can be included if using default resource filtering)
+  ensure_built api-gateway
+
+  # Start backend services
+  port_map=("inventory-service:$INVENTORY_PORT" "user-service:$USER_PORT" "cart-service:$CART_PORT" "api-gateway:$GATEWAY_PORT")
+  for entry in "${port_map[@]}"; do
+    svc="${entry%%:*}"; port="${entry##*:}"
+    if port_in_use "$port"; then
+      if $FORCE_RESTART; then
+        stop_existing_on_port "$port"
+      fi
+    fi
+    if port_in_use "$port"; then
+      echo "[WARN] Port $port already in use. Skipping start of $svc."
+    else
+      start_service "$svc" "$port"
+      # confirm log file touched
+      touch "$LOG_DIR/$svc.log" 2>/dev/null || true
+      sleep 1
+    fi
+  done
+
   echo "All services started (local). Access gateway at http://localhost:$GATEWAY_PORT"
+  echo "Logs: $LOG_DIR (tail -f logs/api-gateway.log)"
   echo "Press Ctrl+C to stop."
   wait
 }

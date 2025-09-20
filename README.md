@@ -40,15 +40,29 @@ Windows (PowerShell):
 ### 2. Run (starts full stack)
 macOS/Linux:
 ```bash
-./run.sh
+./run.sh            # builds missing jars then launches them
 ```
 Windows (PowerShell):
 ```powershell
 ./run.ps1
 ```
 
+Common flags:
+```bash
+--rebuild         # Force repackage all service jars before starting
+--force-restart   # Kill anything already bound to the target ports
+--docker          # Use docker-compose mode instead of local JVM processes
+```
+
+Examples:
+```bash
+./run.sh --rebuild
+./run.sh --force-restart
+./run.sh --docker --build   # container mode (optional)
+```
+
 ### Docker Mode (optional)
-Add `--docker` (and optionally `--build` on first run):
+Add `--docker` (and optionally `--build` on first run) for container mode:
 ```bash
 ./run.sh --docker --build
 ```
@@ -75,6 +89,9 @@ bash scripts/smoke.sh
 |---------|-------|-----|
 | `permission denied: ./setup.sh` | Missing execute bit on Unix | `chmod +x setup.sh run.sh` or use `bash setup.sh` |
 | `command not found: mvn` | Global Maven not installed | Safe to ignore: scripts fall back to per-service `mvnw` |
+| Skipped service (port in use) | Previous instance still running | Use `./run.sh --force-restart` to kill & restart |
+| Want a clean rebuild | Incremental jar not refreshed | Run with `--rebuild` |
+| Old plugin exit 143 lines | Legacy spring-boot:run noise | Eliminated: jars now launched directly |
 | `docker: command not found` when using `--docker` | Docker not installed | Install Docker Desktop / Engine or run without `--docker` |
 | Frontend 404 for assets | Gateway started before build finished (rare) | Re-run `./run.sh` or manually `npm run build` then restart gateway |
 | Port already in use | Another process occupying required port | Adjust ports in `.env` then rerun setup/run |
@@ -83,7 +100,7 @@ bash scripts/smoke.sh
 
 ## Features
 * Direct static routing via API Gateway (no discovery layer required)
-* API Gateway routing + CORS + Basic Auth
+* API Gateway routing + CORS + Basic Auth (username lookup endpoint: `/api/v1/users/username/{username}`)
 * Inventory management (seeded products)
 * Cart with price snapshots & summary endpoint
 * User service with hashed passwords & roles
@@ -101,7 +118,7 @@ Services (all independent H2 databases):
 | user-service | 8082 | Users & roles |
 | cart-service | 8083 | Cart items & summaries |
 
-Frontend static build is copied into the gateway (`/static`).
+Frontend static build is copied into the gateway (`/static`) during `./run.sh` before the gateway jar is packaged/launched.
 
 ## Scripts
 | Script | Purpose |
@@ -333,7 +350,7 @@ If you need dynamic service registration (e.g., scaling instances or changing po
 Rollback is simply removing those dependencies and properties again.
 
 ## Version
-  1.0.0 (simplified – no discovery)
+  1.0.0 (simplified – no discovery; jar-based launcher)
 
 ## License
   Copyright &copy; 2023. All Right Reserved.<br>
