@@ -45,6 +45,8 @@ wait_for(){
 local_mode(){
   MODE=local
   echo "==> Running in LOCAL mode"
+  # helper to check if a port is already in use
+  port_in_use(){ lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
   if command -v mvn >/dev/null 2>&1; then
     MVN_CMD="mvn"
   else
@@ -56,9 +58,18 @@ local_mode(){
   wait_for "discovery" "http://localhost:$DISCOVERY_PORT/actuator/health" || true
 
   for svc in inventory-service user-service cart-service; do
-    echo "==> Starting $svc"
-    (cd "$svc" && chmod +x mvnw 2>/dev/null || true && $MVN_CMD -q -DskipTests spring-boot:run) & PIDS+=("$!")
-    sleep 2
+    case "$svc" in
+      inventory-service) p=$INVENTORY_PORT ;;
+      user-service) p=$USER_PORT ;;
+      cart-service) p=$CART_PORT ;;
+    esac
+    if port_in_use "$p"; then
+      echo "[WARN] Port $p already in use. Skipping start of $svc (assuming it's already running)."
+    else
+      echo "==> Starting $svc (port $p)"
+      (cd "$svc" && chmod +x mvnw 2>/dev/null || true && $MVN_CMD -q -DskipTests spring-boot:run) & PIDS+=("$!")
+      sleep 2
+    fi
   done
 
   echo "==> Building frontend (production)"
@@ -69,8 +80,12 @@ local_mode(){
   rm -rf "$GATEWAY_STATIC_DIR"/*
   cp -R frontend/dist/* "$GATEWAY_STATIC_DIR"/
 
-  echo "==> Starting api-gateway"
-  (cd api-gateway && chmod +x mvnw 2>/dev/null || true && $MVN_CMD -q -DskipTests spring-boot:run) & PIDS+=("$!")
+  if port_in_use "$GATEWAY_PORT"; then
+    echo "[WARN] Port $GATEWAY_PORT already in use. Skipping start of api-gateway."
+  else
+    echo "==> Starting api-gateway"
+    (cd api-gateway && chmod +x mvnw 2>/dev/null || true && $MVN_CMD -q -DskipTests spring-boot:run) & PIDS+=("$!")
+  fi
   echo "All services started (local). Access gateway at http://localhost:$GATEWAY_PORT"
   echo "Press Ctrl+C to stop."
   wait
