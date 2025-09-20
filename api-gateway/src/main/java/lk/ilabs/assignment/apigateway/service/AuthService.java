@@ -23,12 +23,26 @@ public class AuthService implements ReactiveUserDetailsService {
 
     @Override
     public Mono<UserDetails> findByUsername(String username) {
-        return Mono.create(userDetailsMonoSink -> {
-            Mono<UserDTO> dtoMono = webClientBuilder.build().get().uri("http://USER-SERVICE/api/v1/users/{username}", username).retrieve().onStatus(HttpStatusCode::isError, clientResponse -> Mono.empty()).bodyToMono(UserDTO.class);
-            dtoMono.subscribe(userDTO -> {
-                userDetailsMonoSink.success(userDTO.getUsername() == null ? null : new User(userDTO.getUsername(), userDTO.getPassword(), List.of(new SimpleGrantedAuthority("ROLE_" + userDTO.getRole()))));
-            });
+        return Mono.create(sink -> {
+            // Direct static routing (service discovery removed): user-service runs on port 8082 by default.
+            Mono<UserDTO> dtoMono = webClientBuilder.build()
+                    .get()
+                    .uri("http://localhost:8082/api/v1/users/{username}", username)
+                    .retrieve()
+                    .onStatus(HttpStatusCode::isError, clientResponse -> Mono.empty())
+                    .bodyToMono(UserDTO.class);
 
+            dtoMono.subscribe(userDTO -> {
+                if (userDTO == null || userDTO.getUsername() == null) {
+                    sink.success(null);
+                } else {
+                    sink.success(new User(
+                            userDTO.getUsername(),
+                            userDTO.getPassword(),
+                            List.of(new SimpleGrantedAuthority("ROLE_" + userDTO.getRole()))
+                    ));
+                }
+            }, sink::error);
         });
 
     }

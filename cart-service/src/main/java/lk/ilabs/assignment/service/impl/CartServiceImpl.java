@@ -30,7 +30,8 @@ public class CartServiceImpl implements CartService {
 
     @Override
     public void addItemToCard(CartItemDTO cartItem) {
-        ItemDTO itemInStock = restTemplate.getForObject("http://INVENTORY-SERVICE/api/v1/items/{code}", ItemDTO.class, cartItem.getItemCode());
+    // Direct call (service discovery removed): inventory-service default port 8081
+    ItemDTO itemInStock = restTemplate.getForObject("http://localhost:8081/api/v1/items/{code}", ItemDTO.class, cartItem.getItemCode());
         if (itemInStock == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found");
         Optional<CartItem> optCartItem = cartItemRepository.findCartItemByItemCodeAndUsername(cartItem.getItemCode(), cartItem.getUsername());
 
