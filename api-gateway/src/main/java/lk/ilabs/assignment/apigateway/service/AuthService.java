@@ -38,12 +38,15 @@ public class AuthService implements ReactiveUserDetailsService {
 
             dtoMono.subscribe(userDTO -> {
                 if (userDTO == null || userDTO.getUsername() == null) {
-                    sink.success(null);
+                    sink.success(null); // user not found -> propagate empty
                 } else {
+                    String role = userDTO.getRole();
+                    // Avoid double prefixing ROLE_
+                    String authority = role != null && role.startsWith("ROLE_") ? role : ("ROLE_" + role);
                     sink.success(new User(
                             userDTO.getUsername(),
-                            userDTO.getPassword(),
-                            List.of(new SimpleGrantedAuthority("ROLE_" + userDTO.getRole()))
+                            userDTO.getPassword(), // already hashed (sha256) by user-service
+                            List.of(new SimpleGrantedAuthority(authority))
                     ));
                 }
             }, sink::error);

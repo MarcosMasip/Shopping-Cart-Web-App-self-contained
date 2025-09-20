@@ -9,10 +9,19 @@ import java.time.Instant;
 
 @Data
 @NoArgsConstructor
-@AllArgsConstructor
 public class UserDTO implements Serializable {
     private Long id;
     private String username;
-    private String role;
+    // Expose hashed password for demo authentication via gateway Basic Auth (NOT for production use)
+    private String password; // contains password hash
+    private String role;     // Stored as ROLE_USER, ROLE_ADMIN, etc.
     private Instant createdAt;
+
+    public UserDTO(Long id, String username, String password, String role, Instant createdAt) {
+        this.id = id;
+        this.username = username;
+        this.password = password;
+        this.role = role;
+        this.createdAt = createdAt;
+    }
 }

@@ -49,6 +49,7 @@ public class UserServiceImpl implements UserService {
     }
 
     private UserDTO toDTO(User u){
-        return new UserDTO(u.getId(), u.getUsername(), u.getRole(), u.getCreatedAt());
+        // Provide hashed password to gateway for Basic auth password comparison (demo only)
+        return new UserDTO(u.getId(), u.getUsername(), u.getPasswordHash(), u.getRole(), u.getCreatedAt());
     }
 }
