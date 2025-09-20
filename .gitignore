@@ -23,3 +23,10 @@ frontend/dist/
 Thumbs.db
 # Ignore built frontend static assets
 api-gateway/src/main/resources/static/
+
+# H2 database files (per-service persistent dev data)
+inventory-service/data/
+user-service/data/
+cart-service/data/
+api-gateway/data/
+discovery-service/data/
