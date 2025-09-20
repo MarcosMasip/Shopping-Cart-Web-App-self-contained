@@ -1,6 +1,91 @@
 
-# Shopping Cart Web App - REST Microservices architecture
-Simple online shopping cart web application to manage a shopping cart for users. (backend only).
+# Shopping Cart Web App – Self‑Contained Fullstack Microservices
+
+Fully self‑contained demo shopping cart platform: Spring Boot microservices (Eureka Discovery, API Gateway, Inventory, Cart, User) + React/Vite frontend. Run it locally or via Docker with only two commands.
+
+## Quick Start (Two Commands)
+
+Local (JDK 17 + Maven + Node installed):
+
+```bash
+./setup.sh
+./run.sh
+```
+
+Docker (if you prefer containers; falls back to local automatically if Docker unavailable):
+
+```bash
+./setup.sh
+./run.sh --docker --build
+```
+
+Then open: http://localhost:8080
+
+Seed demo credentials (basic auth for protected endpoints):
+```
+Username: demo
+Password: demo
+```
+
+Smoke test after startup:
+```bash
+bash scripts/smoke.sh
+```
+
+## Features
+* Service discovery (Eureka)
+* API Gateway routing + CORS
+* Inventory management (seeded products)
+* Cart with price snapshots & summary endpoint
+* User service with hashed passwords & roles
+* React frontend (products + cart view)
+* Embedded H2 file DBs (no external database needed)
+* Docker & docker-compose optional
+* Fallback logic if Docker missing
+
+## Architecture Overview
+Services (all independent H2 databases):
+| Service | Port | Purpose |
+|---------|------|---------|
+| api-gateway | 8080 | Entry point, static frontend, routing |
+| inventory-service | 8081 | Products, pricing |
+| user-service | 8082 | Users & roles |
+| cart-service | 8083 | Cart items & summaries |
+| discovery-service | 8084 | Eureka registry |
+
+Frontend static build is copied into the gateway (`/static`).
+
+## Scripts
+| Script | Purpose |
+|--------|---------|
+| `setup.sh` / `setup.ps1` | Install dependencies (Maven offline, npm install, create `.env`) |
+| `run.sh` / `run.ps1` | Start all services (local or `--docker`) |
+| `scripts/smoke.sh` | Simple curl-based availability check |
+
+Environment toggle: set `DOCKER_MODE=true` in `.env` or pass `--docker`.
+
+## Testing
+Backend: JPA repository test + cart service unit test (mocked inventory). Frontend: Vitest + React Testing Library sample rendering test.
+
+Run all tests:
+```bash
+mvn -q -DskipTests=false test  # (run in each service directory)
+cd frontend && npm test
+```
+
+## Risk & Fallback Considerations
+| Risk | Mitigation / Fallback |
+|------|-----------------------|
+| Docker absent | `run.sh --docker` auto-detects and reverts to local Maven mode |
+| Compose command variant | Tries `docker compose`, then `docker-compose`, else local |
+| Port conflicts | Override in `.env` (DISCOVERY_PORT, GATEWAY_PORT, etc.) |
+| Slow first build | `setup.sh` pre-fetches Maven deps (dependency:go-offline) |
+| Missing frontend dependencies | `setup.sh` runs `npm install` |
+| Inventory or user service not yet registered | Gateway routes via Eureka; discovery start wait coded |
+| Data loss between runs | H2 file DB persists in `./data` (volumes under Docker) |
+
+## Original System Design & Principles
+The original detailed system design, principles, and references are preserved below for context.
 
 - [System Design](#system-design)
   - [1. Requirements](#1-requirements)

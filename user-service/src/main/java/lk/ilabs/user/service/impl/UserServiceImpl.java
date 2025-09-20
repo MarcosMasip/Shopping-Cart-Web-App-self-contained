@@ -9,6 +9,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
+import java.util.stream.StreamSupport;
+
 @Service
 public class UserServiceImpl implements UserService {
 
@@ -19,14 +22,26 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public void saveUser(UserDTO user) {
-        this.userRepository.save(new User(user.getUsername(), DigestUtils.sha256Hex(user.getPassword()), user.getRole()));
+    public UserDTO create(String username, String rawPassword, String role) {
+        userRepository.findByUsername(username).ifPresent(u -> { throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already exists"); });
+        User saved = userRepository.save(new User(null, username, DigestUtils.sha256Hex(rawPassword), role, null));
+        return toDTO(saved);
     }
 
     @Override
-    public UserDTO findUser(String username) {
-        return this.userRepository.findById(username)
-                .map(u -> new UserDTO(u.getUsername(), u.getPassword(), u.getRole()))
-                .orElseThrow(()-> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invalid Username!"));
+    public UserDTO get(Long id) {
+        return userRepository.findById(id).map(this::toDTO)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    }
+
+    @Override
+    public List<UserDTO> list() {
+        return StreamSupport.stream(userRepository.findAll().spliterator(), false)
+                .map(this::toDTO)
+                .toList();
+    }
+
+    private UserDTO toDTO(User u){
+        return new UserDTO(u.getId(), u.getUsername(), u.getRole(), u.getCreatedAt());
     }
 }

@@ -7,12 +7,14 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080', // gateway
+        target: process.env.VITE_API_BASE || 'http://localhost:8080',
         changeOrigin: true
       }
     }
   },
-  build: {
-    outDir: 'dist'
+  build: { outDir: 'dist' },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test-setup.ts']
   }
 });

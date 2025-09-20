@@ -5,8 +5,10 @@ import lk.ilabs.user.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
-@RequestMapping("/api/v1/users")
+import java.util.List;
+
 @RestController
+@RequestMapping("/api/v1/users")
 @CrossOrigin
 public class UserController {
 
@@ -17,13 +19,18 @@ public class UserController {
     }
 
     @ResponseStatus(HttpStatus.CREATED)
-    @PostMapping(consumes = "application/json")
-    public void saveUser(@RequestBody UserDTO user) {
-        this.userService.saveUser(user);
+    @PostMapping
+    public UserDTO create(@RequestParam String username, @RequestParam String password, @RequestParam(defaultValue = "ROLE_USER") String role){
+        return userService.create(username, password, role);
     }
 
-    @GetMapping(produces = "application/json", value = "/{username}")
-    public UserDTO getUser(@PathVariable String username){
-        return userService.findUser(username);
+    @GetMapping("/{id}")
+    public UserDTO get(@PathVariable Long id){
+        return userService.get(id);
+    }
+
+    @GetMapping
+    public List<UserDTO> list(){
+        return userService.list();
     }
 }
