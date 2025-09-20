@@ -33,7 +33,8 @@ class CartServiceImplTest {
     void addItemThenSummary() {
         lk.ilabs.assignment.dto.ItemDTO itemDTO = new lk.ilabs.assignment.dto.ItemDTO();
         itemDTO.setCode(1); itemDTO.setDescription("Widget"); itemDTO.setQty(100); itemDTO.setPrice(BigDecimal.valueOf(5.50));
-        when(restTemplate.getForObject(anyString(), eq(lk.ilabs.assignment.dto.ItemDTO.class), ArgumentMatchers.any())).thenReturn(itemDTO);
+    // Use anyInt() to avoid ambiguity between varargs and Map overload of getForObject
+    when(restTemplate.getForObject(anyString(), eq(lk.ilabs.assignment.dto.ItemDTO.class), anyInt())).thenReturn(itemDTO);
         when(cartItemRepository.findCartItemByItemCodeAndUsername(1, "alice")).thenReturn(Optional.empty());
         when(cartItemRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -44,7 +45,8 @@ class CartServiceImplTest {
         when(cartItemRepository.findAll()).thenReturn(java.util.List.of(ci));
 
         CartSummaryDTO summary = cartService.summary("alice");
-        assertThat(summary.getLines()).hasSize(1);
+    // Field in CartSummaryDTO is 'items', Lombok generates getItems()
+    assertThat(summary.getItems()).hasSize(1);
         assertThat(summary.getTotal()).isEqualByComparingTo("16.50");
     }
 }
