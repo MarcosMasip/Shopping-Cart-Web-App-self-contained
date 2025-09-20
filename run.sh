@@ -45,13 +45,19 @@ wait_for(){
 local_mode(){
   MODE=local
   echo "==> Running in LOCAL mode"
+  if command -v mvn >/dev/null 2>&1; then
+    MVN_CMD="mvn"
+  else
+    MVN_CMD="./mvnw"
+    echo "(mvn not found, using Maven Wrapper per service)"
+  fi
   echo "==> Starting discovery-service"
-  (cd discovery-service && mvn -q -DskipTests spring-boot:run) & PIDS+=("$!")
+  (cd discovery-service && chmod +x mvnw 2>/dev/null || true && $MVN_CMD -q -DskipTests spring-boot:run) & PIDS+=("$!")
   wait_for "discovery" "http://localhost:$DISCOVERY_PORT/actuator/health" || true
 
   for svc in inventory-service user-service cart-service; do
     echo "==> Starting $svc"
-    (cd "$svc" && mvn -q -DskipTests spring-boot:run) & PIDS+=("$!")
+    (cd "$svc" && chmod +x mvnw 2>/dev/null || true && $MVN_CMD -q -DskipTests spring-boot:run) & PIDS+=("$!")
     sleep 2
   done
 
@@ -64,7 +70,7 @@ local_mode(){
   cp -R frontend/dist/* "$GATEWAY_STATIC_DIR"/
 
   echo "==> Starting api-gateway"
-  (cd api-gateway && mvn -q -DskipTests spring-boot:run) & PIDS+=("$!")
+  (cd api-gateway && chmod +x mvnw 2>/dev/null || true && $MVN_CMD -q -DskipTests spring-boot:run) & PIDS+=("$!")
   echo "All services started (local). Access gateway at http://localhost:$GATEWAY_PORT"
   echo "Press Ctrl+C to stop."
   wait

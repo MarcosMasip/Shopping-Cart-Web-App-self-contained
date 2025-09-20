@@ -8,7 +8,7 @@ Fully self‑contained demo shopping cart platform: Spring Boot microservices (E
 ### 0. Prerequisites
 Install (and ensure they are on your PATH):
 * JDK 17+
-* Maven 3.8+
+* (Optional) Maven 3.8+ (if absent, project Maven Wrappers will be used automatically)
 * Node.js 18+ (npm included)
 * (Optional) Docker + Docker Compose plugin if you want container mode
 
@@ -74,7 +74,7 @@ bash scripts/smoke.sh
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | `permission denied: ./setup.sh` | Missing execute bit on Unix | `chmod +x setup.sh run.sh` or use `bash setup.sh` |
-| `command not found: mvn` | Maven not installed / not on PATH | Install Maven, reopen terminal |
+| `command not found: mvn` | Global Maven not installed | Safe to ignore: scripts fall back to per-service `mvnw` |
 | `docker: command not found` when using `--docker` | Docker not installed | Install Docker Desktop / Engine or run without `--docker` |
 | Frontend 404 for assets | Gateway started before build finished (rare) | Re-run `./run.sh` or manually `npm run build` then restart gateway |
 | Port already in use | Another process occupying required port | Adjust ports in `.env` then rerun setup/run |
