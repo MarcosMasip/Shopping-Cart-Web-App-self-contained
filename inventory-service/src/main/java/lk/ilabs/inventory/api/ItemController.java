@@ -5,6 +5,9 @@ import lk.ilabs.inventory.service.ItemService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.stream.StreamSupport;
+
 @CrossOrigin
 @RestController
 @RequestMapping("/api/v1/items")
@@ -25,5 +28,10 @@ public class ItemController {
     @GetMapping("/{code:\\d+}")
     public ItemDTO getItem(@PathVariable Integer code){
         return this.itemService.getItem(code);
+    }
+
+    @GetMapping
+    public List<ItemDTO> listItems(){
+        return StreamSupport.stream(itemService.listAll().spliterator(), false).toList();
     }
 }

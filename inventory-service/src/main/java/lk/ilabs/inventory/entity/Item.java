@@ -1,14 +1,13 @@
 package lk.ilabs.inventory.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
+import java.time.Instant;
 
 @Data
 @NoArgsConstructor
@@ -20,9 +19,14 @@ public class Item implements Serializable {
     private Integer code;
     private String description;
     private int qty;
+    @Column(precision = 15, scale = 2)
+    private BigDecimal price;
+    private Instant createdAt;
 
-    public Item(String description, int qty) {
+    public Item(String description, int qty, BigDecimal price) {
         this.description = description;
         this.qty = qty;
+        this.price = price;
+        this.createdAt = Instant.now();
     }
 }

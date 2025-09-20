@@ -19,13 +19,23 @@ public class ItemServiceImpl implements ItemService {
 
     @Override
     public ItemDTO addNewItem(ItemDTO item) {
-        Item entity = this.itemRepository.save(new Item( item.getDescription(), item.getQty()));
-        return new ItemDTO(entity.getCode(), entity.getDescription(), entity.getQty());
+        if (item.getPrice() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Price is required");
+        }
+        Item entity = this.itemRepository.save(new Item(item.getDescription(), item.getQty(), item.getPrice()));
+        return new ItemDTO(entity.getCode(), entity.getDescription(), entity.getQty(), entity.getPrice(), entity.getCreatedAt());
     }
 
     @Override
     public ItemDTO getItem(Integer code) {
-        return this.itemRepository.findById(code).map(entity -> new ItemDTO(entity.getCode(), entity.getDescription(), entity.getQty()))
+        return this.itemRepository.findById(code).map(entity -> new ItemDTO(entity.getCode(), entity.getDescription(), entity.getQty(), entity.getPrice(), entity.getCreatedAt()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    }
+
+    @Override
+    public Iterable<ItemDTO> listAll() {
+    return () -> itemRepository.findAll().stream()
+        .map(entity -> new ItemDTO(entity.getCode(), entity.getDescription(), entity.getQty(), entity.getPrice(), entity.getCreatedAt()))
+        .iterator();
     }
 }

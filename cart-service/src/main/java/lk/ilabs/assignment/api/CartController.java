@@ -1,6 +1,8 @@
 package lk.ilabs.assignment.api;
 
 import lk.ilabs.assignment.dto.CartItemDTO;
+import lk.ilabs.assignment.dto.CartLineDTO;
+import lk.ilabs.assignment.dto.CartSummaryDTO;
 import lk.ilabs.assignment.service.CartService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -36,5 +38,15 @@ public class CartController {
     @DeleteMapping("/{code:\\d+}")
     public void removeItemFromCard(@PathVariable Integer code, @RequestHeader String authorization){
         this.cartService.removeItemFromCard(code, getPrincipal(authorization));
+    }
+
+    @GetMapping
+    public java.util.List<CartLineDTO> list(@RequestHeader String authorization){
+        return this.cartService.listCart(getPrincipal(authorization));
+    }
+
+    @GetMapping("/summary")
+    public CartSummaryDTO summary(@RequestHeader String authorization){
+        return this.cartService.summary(getPrincipal(authorization));
     }
 }
