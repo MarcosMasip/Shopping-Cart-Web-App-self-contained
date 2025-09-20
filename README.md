@@ -108,6 +108,7 @@ bash scripts/smoke.sh
 * Embedded H2 file DBs (no external database needed)
 * Docker & docker-compose optional
 * Fallback logic if Docker missing
+* Persistent dev data lives in `./data` (root) and is `.gitignore`d (safe to delete for a clean slate)
 
 ## Architecture Overview
 Services (all independent H2 databases):
