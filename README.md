@@ -1,7 +1,7 @@
 
 # Shopping Cart Web App – Self‑Contained Fullstack Microservices
 
-Fully self‑contained demo shopping cart platform: Spring Boot microservices (Eureka Discovery, API Gateway, Inventory, Cart, User) + React/Vite frontend. Run it locally or via Docker with only two commands.
+Fully self‑contained demo shopping cart platform: Spring Boot microservices (API Gateway, Inventory, Cart, User) + React/Vite frontend. Service discovery (Eureka) was intentionally removed to minimize moving parts and guarantee a friction‑free two‑command startup. An appendix explains how to re‑enable discovery if desired.
 
 ## Quick Start (Two Commands)
 
@@ -82,8 +82,8 @@ bash scripts/smoke.sh
 | Tests fail on first run due to missing deps | `npm install` not finished | Re-run `./setup.sh` (ensures dependencies) |
 
 ## Features
-* Service discovery (Eureka)
-* API Gateway routing + CORS
+* Direct static routing via API Gateway (no discovery layer required)
+* API Gateway routing + CORS + Basic Auth
 * Inventory management (seeded products)
 * Cart with price snapshots & summary endpoint
 * User service with hashed passwords & roles
@@ -100,7 +100,6 @@ Services (all independent H2 databases):
 | inventory-service | 8081 | Products, pricing |
 | user-service | 8082 | Users & roles |
 | cart-service | 8083 | Cart items & summaries |
-| discovery-service | 8084 | Eureka registry |
 
 Frontend static build is copied into the gateway (`/static`).
 
@@ -127,11 +126,10 @@ cd frontend && npm test
 |------|-----------------------|
 | Docker absent | `run.sh --docker` auto-detects and reverts to local Maven mode |
 | Compose command variant | Tries `docker compose`, then `docker-compose`, else local |
-| Port conflicts | Override in `.env` (DISCOVERY_PORT, GATEWAY_PORT, etc.) |
+| Port conflicts | Override in `.env` (GATEWAY_PORT, INVENTORY_PORT, etc.) |
 | Slow first build | `setup.sh` pre-fetches Maven deps (dependency:go-offline) |
 | Missing frontend dependencies | `setup.sh` runs `npm install` |
-| Inventory or user service not yet registered | Gateway routes via Eureka; discovery start wait coded |
-| Data loss between runs | H2 file DB persists in `./data` (volumes under Docker) |
+| Data loss between runs | H2 file DB persists in `./data` (or Docker volumes) |
 
 ## Original System Design & Principles
 The original detailed system design, principles, and references are preserved below for context.
@@ -205,8 +203,8 @@ We need API Gateway for following reasons:
 - Simplify application development by moving shared service functionality, such as the use of SSL certificates, from other parts of the application into the gateway. Other common services such as authentication, authorization, logging, monitoring, or throttling can be difficult to implement and manage across a large number of deployments. It may be better to consolidate this type of functionality, in order to reduce overhead and the chance of errors. Simpler configuration results in easier management and scalability and makes service upgrades simpler.
 - Provide some consistency for request and response logging and monitoring.
 
-#### Discovery Service
-We use *spring-cloud-starter-netflix-eureka-server* to start Eureka Server for service registration and discovery in our system. It helps API Gateway routing requests by service name instead of hard-code URL.
+#### (Removed) Discovery Service
+Originally the system used Eureka (Spring Cloud Netflix). For a lean “clone & run” developer experience it was removed and the gateway now forwards directly to fixed service ports. See Appendix A to restore it.
 
 
 ## Software development principles
@@ -272,7 +270,6 @@ In production environment, we leverage the infrastructure to make the downstream
 | inventory-service     | 8081 |
 | user-service          | 8082 |
 | cart-service          | 8083 |
-| discovery-service     | 8084 |
 
 _Note_: for development purpose, we could bypass authentication by adding "Username: ```<your-test-username>```" to HTTP Header when we send request to downstream services.
 
@@ -309,8 +306,7 @@ For each microservice, we will follow common 4 layers architecture:
 
 ### Frameworks and Libraries
 The Frameworks/Libraries used in the project and their purposes:
-- spring-cloud-starter-netflix-eureka-server : Eureka Server (Registry Service). This library allows services to find and communicate with each other without hard-coding hostname and port.
-- spring-cloud-starter-netflix-eureka-client : Eureka Client, for registering the service with Service Registry.
+// (Eureka dependencies removed for simplified setup)
 - spring-boot-starter-web : for building REST API.
 - spring-boot-starter-test : Starter for testing Spring Boot applications with libraries including JUnit, Hamcrest and Mockito.
 - spring-boot-starter-aop : for aspect-oriented programming with Spring AOP and AspectJ. We use this feature for implementing the customer audit feature.
@@ -320,8 +316,24 @@ The Frameworks/Libraries used in the project and their purposes:
 - spring-security-test: for the testing Spring Security.
 - modelmapper: to make object mapping easy, by automatically determining how one object model maps to another, based on conventions.
 
+## Appendix A – Re‑Enable Service Discovery (Optional)
+If you need dynamic service registration (e.g., scaling instances or changing ports), you can restore Eureka:
+
+1. Reintroduce modules/dependencies:
+  - Add dependency `spring-cloud-starter-netflix-eureka-client` to each service `pom.xml` (gateway, inventory, user, cart).
+  - (Optionally) restore a `discovery-service` module with `spring-cloud-starter-netflix-eureka-server` and an `@EnableEurekaServer` application class.
+2. Re-add `@EnableDiscoveryClient` (or `@EnableEurekaClient`) annotations to each service main class (gateway + backends).
+3. Add property to each service `application.properties`:
+  `spring.application.name=<service-name>`
+  `eureka.client.serviceUrl.defaultZone=http://localhost:8084/eureka`
+4. Switch gateway routes from static `http://localhost:<port>` URIs back to `lb://<service-name>` in `application.properties`.
+5. (Optional) Update `run.sh` to start discovery first and wait for its `/actuator/health` endpoint before launching other services.
+6. Remove the static‑routing comment blocks from README.
+
+Rollback is simply removing those dependencies and properties again.
+
 ## Version
-  1.0.0
+  1.0.0 (simplified – no discovery)
 
 ## License
   Copyright &copy; 2023. All Right Reserved.<br>
@@ -336,3 +348,20 @@ The Frameworks/Libraries used in the project and their purposes:
 
 * Email: visalsrimanga@gmail.com
 * Linkedin: Visal Srimanga
+
+---
+
+## Roadmap / Optional Enhancements
+These are intentionally deferred to keep the core demo minimal:
+1. API Documentation: Add Springdoc OpenAPI (swagger-ui) exposed via gateway.
+2. Auth Hardening: Replace Basic Auth with JWT access/refresh tokens; user registration & password hashing improvements (stronger encoder + salting).
+3. CI Pipeline: GitHub Actions workflow (build matrix Java 17/21 + frontend build + test + docker image publish).
+4. Container Optimization: Multi-stage Dockerfiles with distroless base images and SBOM generation.
+5. Observability: Add Spring Boot Actuator metrics + Prometheus scraper config + Grafana dashboard JSON.
+6. Caching Layer: Introduce Redis (docker-compose optional service) for product catalog and cart session caching.
+7. Resilience: Apply Resilience4j (bulkhead, retry) around cross-service calls (if discovery restored).
+8. Frontend Enhancements: Better error boundaries, suspense for product loading, optimistic cart updates.
+9. Testing: Add contract tests for gateway, component tests with Testcontainers for JPA.
+10. Makefile: Provide cross-platform target aliases (fallback to .PHONY with shell detection).
+
+Open an issue or PR if you’d like any of these prioritized.

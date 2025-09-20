@@ -6,7 +6,6 @@ cd "$ROOT_DIR"
 
 source .env 2>/dev/null || true
 
-DISCOVERY_PORT=${DISCOVERY_PORT:-8084}
 GATEWAY_PORT=${GATEWAY_PORT:-8080}
 INVENTORY_PORT=${INVENTORY_PORT:-8081}
 USER_PORT=${USER_PORT:-8082}
@@ -82,19 +81,7 @@ local_mode(){
     MVN_CMD="./mvnw"
     echo "(mvn not found, using Maven Wrapper per service)"
   fi
-  # Start discovery-service first
-  if port_in_use "$DISCOVERY_PORT"; then
-    if $FORCE_RESTART; then
-      kill_port "$DISCOVERY_PORT"
-    fi
-  fi
-  if port_in_use "$DISCOVERY_PORT"; then
-    echo "[WARN] Port $DISCOVERY_PORT already in use. Skipping start of discovery-service."
-  else
-    echo "==> Starting discovery-service (port $DISCOVERY_PORT)"
-    (cd discovery-service && chmod +x mvnw 2>/dev/null || true && $MVN_CMD -q -DskipTests spring-boot:run) & PIDS+=("$!")
-    wait_for "discovery" "http://localhost:$DISCOVERY_PORT/actuator/health" || true
-  fi
+  # Service discovery removed: gateway uses static direct routes to backend services.
 
   for svc in inventory-service user-service cart-service; do
     case "$svc" in

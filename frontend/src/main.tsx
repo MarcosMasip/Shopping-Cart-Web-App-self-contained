@@ -1,4 +1,5 @@
 import React from 'react';
+// Ensure NodeJS.Process types available for Vite config usage (tsconfig already picks @types/node)
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import App from './pages/App';
