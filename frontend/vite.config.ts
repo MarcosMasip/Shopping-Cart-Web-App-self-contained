@@ -1,7 +1,4 @@
 import { defineConfig } from 'vite';
-// Temporary ambient declaration (ts-node/vite config scope) in case @types/node load lags
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const process: any;
 import react from '@vitejs/plugin-react';
 
 // To use environment variables (like process.env.*) in TS here we rely on @types/node.
@@ -14,7 +11,7 @@ export default defineConfig(({ mode }) => ({
     port: 5173,
     proxy: {
       '/api': {
-        target: (process as any).env.VITE_API_BASE || 'http://localhost:8080',
+  target: process.env.VITE_API_BASE || 'http://localhost:8080',
         changeOrigin: true
       }
     }
