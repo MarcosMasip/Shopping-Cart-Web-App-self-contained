@@ -162,7 +162,20 @@ local_mode(){
   echo "All services started (local). Access gateway at http://localhost:$GATEWAY_PORT"
   echo "Logs: $LOG_DIR (tail -f logs/api-gateway.log)"
   echo "Press Ctrl+C to stop."
-  wait
+  # Keep foreground process alive so trap handles Ctrl+C.
+  # Instead of plain 'wait' (which would return immediately once background startup completes), loop while any service pid lives.
+  while true; do
+    live=0
+    for pid in "${PIDS[@]}"; do
+      if kill -0 "$pid" 2>/dev/null; then
+        live=1; break
+      fi
+    done
+    if [[ $live -eq 0 ]]; then
+      echo "One or more services exited; shutting down supervisor."; break
+    fi
+    sleep 2
+  done
 }
 
 docker_mode(){
