@@ -1,16 +1,50 @@
 
 # Shopping Cart Web App – Self‑Contained Fullstack Microservices
 
-Fully self‑contained demo shopping cart platform: Spring Boot microservices (API Gateway, Inventory, Cart, User) + React/Vite frontend. Service discovery (Eureka) was intentionally removed to minimize moving parts and guarantee a friction‑free two‑command startup. An appendix explains how to re‑enable discovery if desired.
+## Repository Purpose (What & Why)
+This repository is a deliberately simplified, batteries‑included demo of a microservices commerce slice (products + cart + users) that prioritizes an ultra‑low friction developer experience:
+
+Focus goals:
+* Clone → run in **two commands** (`./setup.sh` then `./run.sh`).
+* Zero external infra dependencies (no external DB, no discovery server) while still showing realistic patterns (separate bounded contexts, gateway, DTOs, security layer, seed data, React frontend).
+* Deterministic, idempotent seeding so every fresh startup has working demo credentials & sample products.
+* Clear upgrade path: Appendix shows how to re‑enable service discovery if you need dynamic scaling later.
+
+Intended audience:
+* Engineers evaluating microservice partitioning & gateway patterns without wrestling infra.
+* New hires / workshop participants needing a quick, consistent environment.
+* People wanting a reference for structuring a small Spring Boot + React multi‑service project with shared build/run scripts.
+
+Non‑goals:
+* Full production hardening (JWT/OAuth2, distributed tracing, circuit breakers, persistent RDBMS) – those are intentionally deferred and listed in the Roadmap.
+* Complex domain modeling: pricing, promotions, inventory reservations, etc. kept intentionally lean.
+
+## What Changed Versus the Original Repository
+| Area | Original State | Updated / Current State | Rationale |
+|------|----------------|-------------------------|-----------|
+| Service Discovery | Eureka server + clients | Removed (static port routing via gateway) | Reduce moving parts; instant startup; easier demos |
+| Startup Complexity | Multiple commands, potential race between frontend build & services | Single orchestrator `run.sh` with readiness polling & optional flags | Predictable DX; uniform logs & health status |
+| Database Layer | Mixed (original doc referenced MySQL) | Unified H2 file DB per service (persisted under `data/`) | No external installs required; fast reset |
+| Data Seeding | SQL / ad‑hoc bootstrap causing duplicate key issues | Java `CommandLineRunner` seeders (idempotent) for Users & Inventory | Deterministic & safe re-runs |
+| Cart Repository ID | Inconsistent ID type (string vs UUID) | Normalized to `UUID` | Type safety & clarity |
+| Pricing Seed Types | Mixed numeric types (double vs BigDecimal) | BigDecimal everywhere | Monetary correctness |
+| Frontend Cart State | Separate isolated hooks per page (Add felt like "no change") | Shared `CartContext` provider | Immediate UI reflection; single source of truth |
+| Build Artifacts | Stray `target 2` directories caused `mvn clean` issues | Cleaned & strengthened `.gitignore` | Stable builds / clean working tree |
+| Discovery Service Module | Present | Kept as historical (documented removal) | Narrative clarity + optional re‑enable path |
+| Auth | Basic Auth + manual principal decode | Still Basic (manual extract) | Simplicity; TODO for JWT/Principal improvements |
+| Observability & Docs | Minimal | Expanded README (purpose, comparison, architecture) | Onboarding efficiency |
+
+### Summary of Improvements
+The repository now optimizes for (1) fast onboarding, (2) reproducible runs, (3) minimal cognitive overhead, while cleanly separating concerns so advanced features can be layered in later.
 
 ## Quick Start (Two Commands)
 
 ### 0. Prerequisites
-Install (and ensure they are on your PATH):
+Install (ensure on `PATH`):
 * JDK 17+
-* (Optional) Maven 3.8+ (if absent, project Maven Wrappers will be used automatically)
-* Node.js 18+ (npm included)
-* (Optional) Docker + Docker Compose plugin if you want container mode
+* (Optional) Maven 3.8+ (Maven Wrapper auto‑fallback per service)
+* Node.js 18+ (for frontend build)
+* (Optional) Docker + Docker Compose plugin (for `--docker` mode)
 
 Clone the repo:
 ```bash
@@ -95,7 +129,7 @@ PowerShell:
 
 Then open: http://localhost:8080
 
-Seed demo credentials (basic auth for protected endpoints):
+Seed demo credentials (Basic Auth for protected endpoints):
 ```
 Username: demo
 Password: demo
@@ -107,6 +141,41 @@ Smoke test after startup:
 ```bash
 bash scripts/smoke.sh
 ```
+
+## Frontend Overview
+The frontend lives under `frontend/` and is a Vite + React application compiled to static assets and copied into the API Gateway's `static` resources folder during `./run.sh`.
+
+Key pieces:
+* Products Page: Fetches item catalog from `GET /api/v1/items` (public).
+* Cart Page: Displays `GET /api/v1/cart-items` and `GET /api/v1/cart-items/summary` (requires Basic Auth).
+* Shared State: `CartContext` wraps routes to provide a synchronized cart state across pages. Adding an item triggers a POST then refresh of shared context so all consumers update instantly.
+* Auth: Implemented with browser Basic Auth header (prompt or manual). Future upgrade path: token storage + refresh cycle.
+* Tooling: Vite for fast dev builds; production build executed automatically by `run.sh` (no manual `npm run build` needed).
+
+Frontend Flow Example:
+1. User opens gateway root (served by Spring Boot static resources).
+2. Products page mounts, loads items, displays Add buttons.
+3. Clicking Add executes POST `/api/v1/cart-items` with `{ itemCode, qty: 1 }` (backend injects username).
+4. Context re-fetches cart lines & summary; Cart badge (if implemented) updates immediately.
+
+## Backend Overview
+Microservices (each independent Spring Boot application) expose cohesive capabilities:
+* Inventory Service (`8081`): Item catalog with code, description, quantity, price. Seeds via `InventorySeedConfig` (idempotent).
+* User Service (`8082`): Demo users (system/admin/demo) created in `UserSeedConfig`. Basic Auth user lookup leveraged by gateway.
+* Cart Service (`8083`): Persists cart lines per user with price snapshots; endpoints for list, summary, add, remove. Uses a REST call to inventory to enrich line pricing and store snapshot.
+* API Gateway (`8080`): Single entrypoint; static asset host for frontend; routes API calls to internal services; applies Basic Auth security rules (public inventory list, protected cart/user endpoints). Static routing (no discovery) for clarity.
+
+Design Choices:
+* Root (`/`) info endpoints provide lightweight readiness probes (service name, timestamp) to speed script polling.
+* Deterministic seeding uses `CommandLineRunner` with existence checks instead of fragile SQL scripts.
+* Monetary values handled with `BigDecimal` to prevent floating precision errors.
+* Context state in frontend avoids excessive network chatter and prevents UI desync.
+
+Extensibility Paths:
+* Reintroduce discovery (Appendix A) and expand to dynamic scaling.
+* Swap Basic Auth for JWT once auth complexity is desired.
+* Add Actuator + metrics for production readiness.
+* Introduce caching (Redis) for hot catalog reads.
 
 ## Troubleshooting
 | Symptom | Cause | Fix |
@@ -123,16 +192,18 @@ bash scripts/smoke.sh
 | Tests fail on first run due to missing deps | `npm install` not finished | Re-run `./setup.sh` (ensures dependencies) |
 
 ## Features
+* Two-command startup (`setup` then `run`) – no manual multi-step orchestration
 * Direct static routing via API Gateway (no discovery layer required)
-* API Gateway routing + CORS + Basic Auth (username lookup endpoint: `/api/v1/users/username/{username}`)
+* Gateway routing + CORS + Basic Auth (lookup endpoint: `/api/v1/users/username/{username}`)
 * Inventory management (seeded products)
-* Cart with price snapshots & summary endpoint
-* User service with hashed passwords & roles
-* React frontend (products + cart view)
-* Embedded H2 file DBs (no external database needed)
-* Docker & docker-compose optional
-* Fallback logic if Docker missing
-* Persistent dev data lives in `./data` (root) and is `.gitignore`d (safe to delete for a clean slate)
+* Cart service with price snapshots & summary endpoint
+* User service with hashed passwords & deterministic seed users
+* React + Vite frontend (products & cart) with shared cart context
+* Embedded H2 file DBs per service (persistent across restarts; easy reset)
+* Optional Docker / docker-compose mode
+* Fallback logic when Docker absent
+* Persistent dev data stored under `./data` (safe to delete); excluded from VCS
+* Readiness orchestration & table output for visibility
 
 ## Architecture Overview
 Services (all independent H2 databases):
@@ -375,7 +446,7 @@ If you need dynamic service registration (e.g., scaling instances or changing po
 Rollback is simply removing those dependencies and properties again.
 
 ## Version
-  1.0.0 (simplified – no discovery; jar-based launcher)
+  1.1.0 (simplified – no discovery; jar-based launcher; shared cart context; deterministic seeding refinements)
 
 ## License
   Copyright &copy; 2023. All Right Reserved.<br>
