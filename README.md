@@ -5,18 +5,56 @@ Fully self‑contained demo shopping cart platform: Spring Boot microservices (E
 
 ## Quick Start (Two Commands)
 
-Local (JDK 17 + Maven + Node installed):
+### 0. Prerequisites
+Install (and ensure they are on your PATH):
+* JDK 17+
+* Maven 3.8+
+* Node.js 18+ (npm included)
+* (Optional) Docker + Docker Compose plugin if you want container mode
 
+Clone the repo:
 ```bash
-./setup.sh
-./run.sh
+git clone https://github.com/<your-org-or-user>/Shopping-Cart-Web-App-self-contained.git
+cd Shopping-Cart-Web-App-self-contained
 ```
 
-Docker (if you prefer containers; falls back to local automatically if Docker unavailable):
-
+If you're on macOS/Linux (or WSL) and see a permission error like `permission denied: ./setup.sh`, give the scripts the executable bit once:
 ```bash
-./setup.sh
+chmod +x setup.sh run.sh scripts/smoke.sh
+```
+PowerShell users (Windows) can run the `.ps1` scripts directly; if you get an execution policy warning run:
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+```
+
+### 1. Setup (downloads & prepares everything)
+macOS/Linux:
+```bash
+./setup.sh        # or: bash setup.sh (if you didn't chmod yet)
+```
+Windows (PowerShell):
+```powershell
+./setup.ps1
+```
+
+### 2. Run (starts full stack)
+macOS/Linux:
+```bash
+./run.sh
+```
+Windows (PowerShell):
+```powershell
+./run.ps1
+```
+
+### Docker Mode (optional)
+Add `--docker` (and optionally `--build` on first run):
+```bash
 ./run.sh --docker --build
+```
+PowerShell:
+```powershell
+./run.ps1 --docker --build
 ```
 
 Then open: http://localhost:8080
@@ -31,6 +69,17 @@ Smoke test after startup:
 ```bash
 bash scripts/smoke.sh
 ```
+
+## Troubleshooting
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `permission denied: ./setup.sh` | Missing execute bit on Unix | `chmod +x setup.sh run.sh` or use `bash setup.sh` |
+| `command not found: mvn` | Maven not installed / not on PATH | Install Maven, reopen terminal |
+| `docker: command not found` when using `--docker` | Docker not installed | Install Docker Desktop / Engine or run without `--docker` |
+| Frontend 404 for assets | Gateway started before build finished (rare) | Re-run `./run.sh` or manually `npm run build` then restart gateway |
+| Port already in use | Another process occupying required port | Adjust ports in `.env` then rerun setup/run |
+| PowerShell script blocked | Execution policy restriction | `Set-ExecutionPolicy -Scope Process RemoteSigned` |
+| Tests fail on first run due to missing deps | `npm install` not finished | Re-run `./setup.sh` (ensures dependencies) |
 
 ## Features
 * Service discovery (Eureka)
