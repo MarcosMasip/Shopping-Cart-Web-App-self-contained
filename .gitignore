@@ -31,3 +31,6 @@ user-service/data/
 cart-service/data/
 api-gateway/data/
 discovery-service/data/
+
+# Root-level aggregated H2 databases created by run.sh (do not commit)
+data/
