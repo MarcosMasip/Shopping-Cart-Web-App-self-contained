@@ -13,6 +13,16 @@ USER_PORT=${USER_PORT:-8082}
 CART_PORT=${CART_PORT:-8083}
 FRONTEND_DEV_PORT=${FRONTEND_DEV_PORT:-5173}
 
+# Flags
+FORCE_RESTART=false
+DOCKER_ARG=false
+for arg in "$@"; do
+  case "$arg" in
+    --force-restart) FORCE_RESTART=true ;;
+    --docker) DOCKER_ARG=true ;;
+  esac
+done
+
 PIDS=()
 
 cleanup(){
@@ -47,15 +57,44 @@ local_mode(){
   echo "==> Running in LOCAL mode"
   # helper to check if a port is already in use
   port_in_use(){ lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
+  kill_port(){
+    local p=$1
+    local pids
+    pids=$(lsof -t -nP -iTCP:"$p" -sTCP:LISTEN 2>/dev/null || true)
+    if [[ -n "$pids" ]]; then
+      echo "[INFO] Killing processes on port $p: $pids"
+      echo "$pids" | xargs -r kill 2>/dev/null || true
+      # brief wait for port to free
+      for i in {1..10}; do
+        port_in_use "$p" || break
+        sleep 0.2
+      done
+      if port_in_use "$p"; then
+        echo "[WARN] Port $p still busy after kill attempts."; fi
+    fi
+  }
+  if $FORCE_RESTART; then
+    echo "==> FORCE_RESTART enabled: existing processes on target ports will be terminated."
+  fi
   if command -v mvn >/dev/null 2>&1; then
     MVN_CMD="mvn"
   else
     MVN_CMD="./mvnw"
     echo "(mvn not found, using Maven Wrapper per service)"
   fi
-  echo "==> Starting discovery-service"
-  (cd discovery-service && chmod +x mvnw 2>/dev/null || true && $MVN_CMD -q -DskipTests spring-boot:run) & PIDS+=("$!")
-  wait_for "discovery" "http://localhost:$DISCOVERY_PORT/actuator/health" || true
+  # Start discovery-service first
+  if port_in_use "$DISCOVERY_PORT"; then
+    if $FORCE_RESTART; then
+      kill_port "$DISCOVERY_PORT"
+    fi
+  fi
+  if port_in_use "$DISCOVERY_PORT"; then
+    echo "[WARN] Port $DISCOVERY_PORT already in use. Skipping start of discovery-service."
+  else
+    echo "==> Starting discovery-service (port $DISCOVERY_PORT)"
+    (cd discovery-service && chmod +x mvnw 2>/dev/null || true && $MVN_CMD -q -DskipTests spring-boot:run) & PIDS+=("$!")
+    wait_for "discovery" "http://localhost:$DISCOVERY_PORT/actuator/health" || true
+  fi
 
   for svc in inventory-service user-service cart-service; do
     case "$svc" in
@@ -63,6 +102,9 @@ local_mode(){
       user-service) p=$USER_PORT ;;
       cart-service) p=$CART_PORT ;;
     esac
+    if port_in_use "$p" && $FORCE_RESTART; then
+      kill_port "$p"
+    fi
     if port_in_use "$p"; then
       echo "[WARN] Port $p already in use. Skipping start of $svc (assuming it's already running)."
     else
@@ -80,6 +122,9 @@ local_mode(){
   rm -rf "$GATEWAY_STATIC_DIR"/*
   cp -R frontend/dist/* "$GATEWAY_STATIC_DIR"/
 
+  if port_in_use "$GATEWAY_PORT" && $FORCE_RESTART; then
+    kill_port "$GATEWAY_PORT"
+  fi
   if port_in_use "$GATEWAY_PORT"; then
     echo "[WARN] Port $GATEWAY_PORT already in use. Skipping start of api-gateway."
   else
