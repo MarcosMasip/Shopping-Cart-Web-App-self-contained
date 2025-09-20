@@ -52,6 +52,7 @@ Common flags:
 --rebuild         # Force repackage all service jars before starting
 --force-restart   # Kill anything already bound to the target ports
 --docker          # Use docker-compose mode instead of local JVM processes
+--open            # (local mode) Auto-open the gateway in your browser after readiness check
 ```
 
 Examples:
@@ -59,7 +60,28 @@ Examples:
 ./run.sh --rebuild
 ./run.sh --force-restart
 ./run.sh --docker --build   # container mode (optional)
+./run.sh --force-restart --open  # restart everything and open browser
 ```
+
+### Startup Readiness Output
+After launching services locally, `run.sh` prints a live readiness table, polling lightweight root info endpoints (JSON metadata) to confirm each service is accepting requests:
+
+| Service  | Endpoint polled            | Notes |
+|----------|----------------------------|-------|
+| inventory| http://localhost:8081/     | Root returns service name, version, timestamp |
+| user     | http://localhost:8082/     | Same uniform root info payload |
+| cart     | http://localhost:8083/     | Unprotected root (avoids auth for readiness) |
+| gateway  | http://localhost:8080/api/v1/items | Uses product list to ensure routing + frontend assets are ready |
+
+Status codes shown:
+* OK – Successful response (HTTP 200) within timeout
+* STARTING – Last probe failed but timeout window not yet exceeded
+* TIMEOUT – Exceeded allotted wait (script keeps supervising existing processes)
+* SKIPPED – Port was already in use (pre-existing instance adopted rather than restarted)
+
+When all services reach OK (or any TIMEOUT threshold is hit), the table stops updating and (if you passed `--open`) your default browser is opened to the gateway.
+
+Tip: If a service shows TIMEOUT, inspect its log, e.g. `tail -f logs/cart-service.log`. You can safely re-run `./run.sh` (it will attach to running services unless you specify `--force-restart`).
 
 ### Docker Mode (optional)
 Add `--docker` (and optionally `--build` on first run) for container mode:
@@ -78,6 +100,8 @@ Seed demo credentials (basic auth for protected endpoints):
 Username: demo
 Password: demo
 ```
+
+The user-service deterministically ensures three users exist on every startup (system, admin, demo – all with password 'demo'). If you delete the H2 files in `data/` they will be recreated. This guarantees Basic Auth works even after wiping the database.
 
 Smoke test after startup:
 ```bash

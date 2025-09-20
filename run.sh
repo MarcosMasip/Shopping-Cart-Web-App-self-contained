@@ -42,10 +42,18 @@ ensure_built(){
   local svc=$1
   local jar
   jar=$(jar_path "$svc")
+  local need_build=false
   if $REBUILD || [[ ! -f "$jar" ]]; then
+    need_build=true
+  else
+    # Rebuild if any source/resource file newer than jar
+    if find "$ROOT_DIR/$svc/src" -type f -newer "$jar" -print -quit | grep -q .; then
+      need_build=true
+    fi
+  fi
+  if $need_build; then
     echo "[BUILD] Packaging $svc"
-    (cd "$ROOT_DIR/$svc" && ./mvnw -q -DskipTests package) || {
-      echo "[ERROR] Build failed for $svc"; exit 1; }
+    (cd "$ROOT_DIR/$svc" && ./mvnw -q -DskipTests clean package) || { echo "[ERROR] Build failed for $svc"; exit 1; }
   fi
 }
 
@@ -153,6 +161,13 @@ local_mode(){
     fi
     if port_in_use "$port"; then
       echo "[WARN] Port $port already in use. Skipping start of $svc."
+      # Attempt to register existing PID if pid file present (best effort)
+      if [[ -f "$LOG_DIR/$svc.pid" ]]; then
+        existing_pid=$(cat "$LOG_DIR/$svc.pid" 2>/dev/null || true)
+        if [[ -n "${existing_pid:-}" ]] && kill -0 "$existing_pid" 2>/dev/null; then
+          PIDS+=("$existing_pid")
+        fi
+      fi
     else
       start_service "$svc" "$port"
       # confirm log file touched
@@ -162,22 +177,23 @@ local_mode(){
   done
 
   echo "==> Waiting for service readiness"
-  # readiness endpoints (direct service ports)
-  declare -A readiness
-  readiness[INVENTORY]="http://localhost:$INVENTORY_PORT/api/v1/items"
-  readiness[USER]="http://localhost:$USER_PORT/api/v1/users"
-  readiness[CART]="http://localhost:$CART_PORT/api/v1/cart-items"
-  readiness[GATEWAY]="http://localhost:$GATEWAY_PORT/api/v1/items"
-
+  SERVICES_ORDER="INVENTORY USER CART GATEWAY"
   printf "%-10s %-45s %s\n" "SERVICE" "URL" "STATUS"
-  for key in INVENTORY USER CART GATEWAY; do
-    url="${readiness[$key]}"
+  for key in $SERVICES_ORDER; do
+    case $key in
+      INVENTORY) url="http://localhost:$INVENTORY_PORT/" ;;
+      USER) url="http://localhost:$USER_PORT/" ;;
+      CART) url="http://localhost:$CART_PORT/" ;;
+      GATEWAY) url="http://localhost:$GATEWAY_PORT/api/v1/items" ;;
+    esac
     status="WAITING"
-    for i in {1..30}; do
+    i=1
+  # Allow up to 60s per service (some cold first builds were hitting 30s timeout)
+  while [ $i -le 60 ]; do
       if curl -fsS "$url" >/dev/null 2>&1; then status="OK"; break; fi
-      sleep 1
+      sleep 1; i=$((i+1))
     done
-    if [[ "$status" != "OK" ]]; then status="TIMEOUT"; fi
+    if [ "$status" != "OK" ]; then status="TIMEOUT"; fi
     printf "%-10s %-45s %s\n" "$key" "$url" "$status"
   done
 
@@ -186,20 +202,26 @@ local_mode(){
   echo "Logs: $LOG_DIR (tail -f logs/api-gateway.log)"
   [[ $OPEN_BROWSER == true ]] && { command -v open >/dev/null 2>&1 && open "http://localhost:$GATEWAY_PORT" || true; }
   echo "Press Ctrl+C to stop."
-  # Keep foreground process alive so trap handles Ctrl+C.
-  # Instead of plain 'wait' (which would return immediately once background startup completes), loop while any service pid lives.
-  while true; do
-    live=0
-    for pid in "${PIDS[@]}"; do
-      if kill -0 "$pid" 2>/dev/null; then
-        live=1; break
+  # Supervision loop (only if we actually started or detected PIDs)
+  if [ "${#PIDS[@]:-0}" -eq 0 ]; then
+    echo "No new service processes were started in this invocation (all ports already busy)."
+    echo "Use --force-restart to restart them or Ctrl+C to exit this holding shell."
+    # Idle wait so trap still works if user wants to terminate underlying processes later
+    while true; do sleep 60; done
+  else
+    while true; do
+      live=0
+      for pid in "${PIDS[@]:-}"; do
+        if kill -0 "$pid" 2>/dev/null; then
+          live=1; break
+        fi
+      done
+      if [ $live -eq 0 ]; then
+        echo "All supervised service processes exited; shutting down supervisor."; break
       fi
+      sleep 2
     done
-    if [[ $live -eq 0 ]]; then
-      echo "One or more services exited; shutting down supervisor."; break
-    fi
-    sleep 2
-  done
+  fi
 }
 
 docker_mode(){

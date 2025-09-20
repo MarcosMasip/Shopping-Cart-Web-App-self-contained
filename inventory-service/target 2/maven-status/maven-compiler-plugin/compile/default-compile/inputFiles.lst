@@ -1,0 +1,8 @@
+/Users/marcosmasip/Documents/Shopping-Cart-Web-App-self-contained/inventory-service/src/main/java/lk/ilabs/inventory/api/RootInfoController.java
+/Users/marcosmasip/Documents/Shopping-Cart-Web-App-self-contained/inventory-service/src/main/java/lk/ilabs/inventory/repository/ItemRepository.java
+/Users/marcosmasip/Documents/Shopping-Cart-Web-App-self-contained/inventory-service/src/main/java/lk/ilabs/inventory/api/ItemController.java
+/Users/marcosmasip/Documents/Shopping-Cart-Web-App-self-contained/inventory-service/src/main/java/lk/ilabs/inventory/InventoryServiceApplication.java
+/Users/marcosmasip/Documents/Shopping-Cart-Web-App-self-contained/inventory-service/src/main/java/lk/ilabs/inventory/service/impl/ItemServiceImpl.java
+/Users/marcosmasip/Documents/Shopping-Cart-Web-App-self-contained/inventory-service/src/main/java/lk/ilabs/inventory/entity/Item.java
+/Users/marcosmasip/Documents/Shopping-Cart-Web-App-self-contained/inventory-service/src/main/java/lk/ilabs/inventory/dto/ItemDTO.java
+/Users/marcosmasip/Documents/Shopping-Cart-Web-App-self-contained/inventory-service/src/main/java/lk/ilabs/inventory/service/ItemService.java

@@ -1,0 +1,8 @@
+lk/ilabs/inventory/service/ItemService.class
+lk/ilabs/inventory/repository/ItemRepository.class
+lk/ilabs/inventory/InventoryServiceApplication.class
+lk/ilabs/inventory/service/impl/ItemServiceImpl.class
+lk/ilabs/inventory/api/ItemController.class
+lk/ilabs/inventory/dto/ItemDTO.class
+lk/ilabs/inventory/entity/Item.class
+lk/ilabs/inventory/api/RootInfoController.class
