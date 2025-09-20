@@ -27,10 +27,16 @@ public class ApiGatewayApplication {
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         http.csrf().disable();
         http.cors();
-        http.authorizeExchange().pathMatchers("/eureka/**").permitAll()
+        http.authorizeExchange()
+                // Public: service registry UI + static frontend + product browse
+                .pathMatchers("/eureka/**", "/", "/index.html", "/assets/**", "/favicon.ico").permitAll()
+                .pathMatchers(HttpMethod.GET, "/api/v1/items/**").permitAll()
+                // Protected mutations
                 .pathMatchers(HttpMethod.POST, "/api/v1/users").hasAnyRole("SYSTEM")
-				.pathMatchers(HttpMethod.POST, "/api/v1/items").hasAnyRole("ADMIN")
-                .anyExchange().authenticated().and().httpBasic();
+                .pathMatchers(HttpMethod.POST, "/api/v1/items").hasAnyRole("ADMIN")
+                // Everything else requires auth (e.g., cart operations, user details)
+                .anyExchange().authenticated()
+                .and().httpBasic();
         return http.build();
     }
 
@@ -68,5 +74,6 @@ public class ApiGatewayApplication {
         source.registerCorsConfiguration("/**", cfg);
         return source;
     }
+
 
 }
