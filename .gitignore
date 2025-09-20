@@ -1,0 +1,25 @@
+# Root ignore to prevent accidental commits of build artifacts and dependencies
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+**/node_modules/
+
+# Java build output
+**/target/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Logs & env
+*.log
+.env
+
+# Maven wrapper jars are already allowed inside each service .gitignore
+
+# Misc
+Thumbs.db
+# Ignore built frontend static assets
+api-gateway/src/main/resources/static/
