@@ -35,6 +35,13 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    public UserDTO getByUsername(String username) {
+        return userRepository.findByUsername(username)
+                .map(this::toDTO)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    }
+
+    @Override
     public List<UserDTO> list() {
         return StreamSupport.stream(userRepository.findAll().spliterator(), false)
                 .map(this::toDTO)

@@ -89,6 +89,19 @@ local_mode(){
       user-service) p=$USER_PORT ;;
       cart-service) p=$CART_PORT ;;
     esac
+    if $FORCE_RESTART; then
+      # Extra safety: kill any java process whose cwd includes the service folder (handles cases where port changed or still closing)
+      jps=$(pgrep -fl "java" || true)
+      if [[ -n "$jps" ]]; then
+        while read -r line; do
+          pid=$(echo "$line" | awk '{print $1}')
+          if lsof -p "$pid" 2>/dev/null | grep -q "$svc"; then
+            echo "[INFO] Force killing lingering process $pid for $svc"
+            kill "$pid" 2>/dev/null || true
+          fi
+        done <<< "$jps"
+      fi
+    fi
     if port_in_use "$p" && $FORCE_RESTART; then
       kill_port "$p"
     fi

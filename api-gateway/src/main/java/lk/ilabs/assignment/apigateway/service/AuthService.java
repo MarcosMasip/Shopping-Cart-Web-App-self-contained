@@ -1,6 +1,7 @@
 package lk.ilabs.assignment.apigateway.service;
 
 import lk.ilabs.assignment.apigateway.dto.UserDTO;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.ReactiveUserDetailsService;
@@ -16,18 +17,21 @@ import java.util.List;
 public class AuthService implements ReactiveUserDetailsService {
 
     private final WebClient.Builder webClientBuilder;
+    private final String userServiceBaseUrl;
 
-    public AuthService(WebClient.Builder webClientBuilder) {
+    public AuthService(WebClient.Builder webClientBuilder,
+                       @Value("${service.user.base-url:http://localhost:8082}") String userServiceBaseUrl) {
         this.webClientBuilder = webClientBuilder;
+        this.userServiceBaseUrl = userServiceBaseUrl;
     }
 
     @Override
     public Mono<UserDetails> findByUsername(String username) {
         return Mono.create(sink -> {
-            // Direct static routing (service discovery removed): user-service runs on port 8082 by default.
-            Mono<UserDTO> dtoMono = webClientBuilder.build()
-                    .get()
-                    .uri("http://localhost:8082/api/v1/users/{username}", username)
+        // Fetch by username (String) to avoid Long path variable mismatch
+        Mono<UserDTO> dtoMono = webClientBuilder.build()
+            .get()
+            .uri(userServiceBaseUrl + "/api/v1/users/username/{username}", username)
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, clientResponse -> Mono.empty())
                     .bodyToMono(UserDTO.class);
