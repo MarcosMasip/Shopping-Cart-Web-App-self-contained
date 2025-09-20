@@ -16,11 +16,13 @@ FRONTEND_DEV_PORT=${FRONTEND_DEV_PORT:-5173}
 FORCE_RESTART=false
 DOCKER_ARG=false
 REBUILD=false
+OPEN_BROWSER=false
 for arg in "$@"; do
   case "$arg" in
     --force-restart) FORCE_RESTART=true ;;
     --docker) DOCKER_ARG=true ;;
     --rebuild) REBUILD=true ;;
+    --open) OPEN_BROWSER=true ;;
   esac
 done
 
@@ -159,8 +161,30 @@ local_mode(){
     fi
   done
 
-  echo "All services started (local). Access gateway at http://localhost:$GATEWAY_PORT"
+  echo "==> Waiting for service readiness"
+  # readiness endpoints (direct service ports)
+  declare -A readiness
+  readiness[INVENTORY]="http://localhost:$INVENTORY_PORT/api/v1/items"
+  readiness[USER]="http://localhost:$USER_PORT/api/v1/users"
+  readiness[CART]="http://localhost:$CART_PORT/api/v1/cart-items"
+  readiness[GATEWAY]="http://localhost:$GATEWAY_PORT/api/v1/items"
+
+  printf "%-10s %-45s %s\n" "SERVICE" "URL" "STATUS"
+  for key in INVENTORY USER CART GATEWAY; do
+    url="${readiness[$key]}"
+    status="WAITING"
+    for i in {1..30}; do
+      if curl -fsS "$url" >/dev/null 2>&1; then status="OK"; break; fi
+      sleep 1
+    done
+    if [[ "$status" != "OK" ]]; then status="TIMEOUT"; fi
+    printf "%-10s %-45s %s\n" "$key" "$url" "$status"
+  done
+
+  echo
+  echo "All services launched. Gateway: http://localhost:$GATEWAY_PORT"
   echo "Logs: $LOG_DIR (tail -f logs/api-gateway.log)"
+  [[ $OPEN_BROWSER == true ]] && { command -v open >/dev/null 2>&1 && open "http://localhost:$GATEWAY_PORT" || true; }
   echo "Press Ctrl+C to stop."
   # Keep foreground process alive so trap handles Ctrl+C.
   # Instead of plain 'wait' (which would return immediately once background startup completes), loop while any service pid lives.
